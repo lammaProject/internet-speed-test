@@ -12,8 +12,7 @@ from dataclasses import dataclass
 DEFAULT_REQUESTS = 10
 DEFAULT_TIMEOUT = 30.0
 CHUNK_SIZE = 64 * 1024
-MIB = 1024 * 1024
-MEGABIT = 1_000_000
+MEGABYTE = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -22,10 +21,10 @@ class Measurement:
     elapsed_s: float
 
     @property
-    def speed_mib_s(self) -> float:
+    def speed_mb_s(self) -> float:
         if self.elapsed_s <= 0:
             return 0.0
-        return self.size_bytes / MIB / self.elapsed_s
+        return self.size_bytes / MEGABYTE / self.elapsed_s
 
 
 def fetch(url: str, timeout: float) -> Measurement:
@@ -52,9 +51,9 @@ def run(url: str, count: int, timeout: float) -> list[Measurement]:
         measurements.append(measurement)
         print(
             f"{index:2d}/{count}  "
-            f"{measurement.size_bytes / MIB:8.2f} MiB  "
+            f"{measurement.size_bytes / MEGABYTE:8.2f} MB  "
             f"{measurement.elapsed_s:7.3f} s  "
-            f"{measurement.speed_mib_s:7.2f} MiB/s"
+            f"{measurement.speed_mb_s:7.2f} MB/s"
         )
     return measurements
 
@@ -68,11 +67,10 @@ def summarize(measurements: list[Measurement]) -> str:
     return "\n".join(
         [
             f"Requests:        {count}",
-            f"Total size:      {total_bytes / MIB:.2f} MiB ({total_bytes} bytes)",
+            f"Total size:      {total_bytes / MEGABYTE:.2f} MB ({total_bytes} bytes)",
             f"Total time:      {total_time:.3f} s",
             f"Average request: {average_time:.3f} s",
-            f"Download speed:  {speed_bytes_s / MIB:.2f} MiB/s "
-            f"({speed_bytes_s * 8 / MEGABIT:.2f} Mbit/s)",
+            f"Download speed:  {speed_bytes_s / MEGABYTE:.2f} MB/s",
         ]
     )
 
@@ -136,7 +134,7 @@ def ask_choice() -> str:
     print("1) repeat  2) another URL  3) exit")
     while True:
         try:
-            answer = input("Choice [1]: ").strip()
+            answer = input("Choice: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return "3"

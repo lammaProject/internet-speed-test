@@ -9,26 +9,26 @@ from speed_test import Measurement, summarize
 
 class MeasurementTest(unittest.TestCase):
     def test_speed_is_size_over_time(self):
-        measurement = Measurement(size_bytes=2 * speed_test.MIB, elapsed_s=2.0)
-        self.assertAlmostEqual(measurement.speed_mib_s, 1.0)
+        measurement = Measurement(size_bytes=2 * speed_test.MEGABYTE, elapsed_s=2.0)
+        self.assertAlmostEqual(measurement.speed_mb_s, 1.0)
 
     def test_zero_time_gives_zero_speed(self):
         measurement = Measurement(size_bytes=1024, elapsed_s=0.0)
-        self.assertEqual(measurement.speed_mib_s, 0.0)
+        self.assertEqual(measurement.speed_mb_s, 0.0)
 
 
 class SummarizeTest(unittest.TestCase):
     def test_totals_and_aggregate_speed(self):
         measurements = [
-            Measurement(size_bytes=1 * speed_test.MIB, elapsed_s=1.0),
-            Measurement(size_bytes=3 * speed_test.MIB, elapsed_s=3.0),
+            Measurement(size_bytes=1 * speed_test.MEGABYTE, elapsed_s=1.0),
+            Measurement(size_bytes=3 * speed_test.MEGABYTE, elapsed_s=3.0),
         ]
         text = summarize(measurements)
         self.assertIn("Requests:        2", text)
-        self.assertIn("Total size:      4.00 MiB (4194304 bytes)", text)
+        self.assertIn("Total size:      4.00 MB (4000000 bytes)", text)
         self.assertIn("Total time:      4.000 s", text)
         self.assertIn("Average request: 2.000 s", text)
-        self.assertIn("Download speed:  1.00 MiB/s (8.39 Mbit/s)", text)
+        self.assertIn("Download speed:  1.00 MB/s", text)
 
     def test_empty_list_does_not_crash(self):
         text = summarize([])
@@ -90,7 +90,7 @@ class InteractiveTest(unittest.TestCase):
 
         def fake_run(url, count, timeout):
             urls.append(url)
-            return [Measurement(speed_test.MIB, 1.0)]
+            return [Measurement(speed_test.MEGABYTE, 1.0)]
 
         code = self.run_main(
             ["http://a", "1", "2", "http://b", "3"],
@@ -103,7 +103,7 @@ class InteractiveTest(unittest.TestCase):
     def test_invalid_choice_is_retried(self):
         code = self.run_main(
             ["http://a", "9", "3"],
-            lambda url, count, timeout: [Measurement(speed_test.MIB, 1.0)],
+            lambda url, count, timeout: [Measurement(speed_test.MEGABYTE, 1.0)],
         )
         self.assertEqual(code, 0)
 

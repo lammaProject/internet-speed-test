@@ -35,13 +35,13 @@ $ python speed_test.py
 URL (empty to exit): https://speed.cloudflare.com/__down?bytes=1000000
 ...
 Requests:        10
-Total size:      9.54 MiB (10000000 bytes)
-Total time:      7.524 s
-Average request: 0.752 s
-Download speed:  1.27 MiB/s (10.63 Mbit/s)
+Total size:      10.00 MB (10000000 bytes)
+Total time:      5.592 s
+Average request: 0.559 s
+Download speed:  1.79 MB/s
 
 1) repeat  2) another URL  3) exit
-Choice [1]: 1
+Choice: 1
 ```
 
 - `1` (или просто Enter) — повторить замер для того же адреса;
@@ -64,24 +64,23 @@ Choice [1]: 1
 URL:      https://speed.cloudflare.com/__down?bytes=1000000
 Requests: 10, timeout: 30 s
 
- 1/10      0.95 MiB    0.696 s     1.37 MiB/s
- 2/10      0.95 MiB    0.438 s     2.18 MiB/s
+ 1/10      1.00 MB    0.459 s     2.18 MB/s
+ 2/10      1.00 MB    0.514 s     1.95 MB/s
  ...
-10/10      0.95 MiB    0.478 s     1.99 MiB/s
+10/10      1.00 MB    0.821 s     1.22 MB/s
 
 Requests:        10
-Total size:      9.54 MiB (10000000 bytes)
-Total time:      7.524 s
-Average request: 0.752 s
-Download speed:  1.27 MiB/s (10.63 Mbit/s)
+Total size:      10.00 MB (10000000 bytes)
+Total time:      5.592 s
+Average request: 0.559 s
+Download speed:  1.79 MB/s
 ```
 
 ## Единицы измерения
 
 - **Время** — секунды (`s`), выводится с точностью до миллисекунд.
-- **Объём** — MiB (мебибайты): 1 MiB = 1 048 576 байт; в скобках — точное число байт.
-- **Скорость** — MiB/s (мебибайты в секунду), а в скобках Mbit/s (мегабиты в секунду,
-  1 Mbit = 1 000 000 бит) — в таких единицах скорость обычно указывают провайдеры.
+- **Объём** — MB (мегабайты): 1 MB = 1 000 000 байт; в скобках — точное число байт.
+- **Скорость** — MB/s (мегабайты в секунду): 1 MB/s = 1 000 000 байт в секунду.
 
 ## Как считаются показатели
 
