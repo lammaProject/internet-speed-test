@@ -1,4 +1,4 @@
-"""Measure download speed by fetching the same URL in parallel or sequentially."""
+"""Measure download speed by fetching the same URL sequentially."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -42,64 +41,49 @@ def fetch(url: str, timeout: float) -> Measurement:
     return Measurement(size, elapsed)
 
 
-def run(
-    url: str,
-    count: int,
-    timeout: float,
-    streams: int = 1,
-) -> list[Measurement]:
+def run(url: str, count: int, timeout: float) -> list[Measurement]:
     measurements: list[Measurement] = []
-    with ThreadPoolExecutor(max_workers=streams) as pool:
-        futures = {
-            pool.submit(fetch, url, timeout): index
-            for index in range(1, count + 1)
-        }
-        for future in as_completed(futures):
-            index = futures[future]
-            try:
-                measurement = future.result()
-            except (urllib.error.URLError, OSError) as exc:
-                raise RuntimeError(
-                    f"request {index}/{count} failed: {exc}"
-                ) from exc
-            measurements.append(measurement)
-            print(
-                f"{index:2d}/{count}  "
-                f"{measurement.size_bytes / MEGABYTE:8.2f} MB  "
-                f"{measurement.elapsed_s:7.3f} s  "
-                f"{measurement.speed_mb_s:7.2f} MB/s"
-            )
+    for index in range(1, count + 1):
+        try:
+            measurement = fetch(url, timeout)
+        except (urllib.error.URLError, OSError) as exc:
+            raise RuntimeError(
+                f"request {index}/{count} failed: {exc}"
+            ) from exc
+        measurements.append(measurement)
+        print(
+            f"{index:2d}/{count}  "
+            f"{measurement.size_bytes / MEGABYTE:8.2f} MB  "
+            f"{measurement.elapsed_s:7.3f} s  "
+            f"{measurement.speed_mb_s:7.2f} MB/s"
+        )
     return measurements
 
 
-def summarize(
-    measurements: list[Measurement],
-    total_time: float | None = None,
-) -> str:
+def summarize(measurements: list[Measurement], total_time: float) -> str:
     total_bytes = sum(item.size_bytes for item in measurements)
     request_time = sum(item.elapsed_s for item in measurements)
     count = len(measurements)
     average_time = request_time / count if count else 0.0
-    wall_time = request_time if total_time is None else total_time
-    speed_bytes_s = total_bytes / wall_time if wall_time else 0.0
+    speed_bytes_s = total_bytes / total_time if total_time else 0.0
     return "\n".join(
         [
             f"Requests:        {count}",
             f"Total size:      {total_bytes / MEGABYTE:.2f} MB ({total_bytes} bytes)",
-            f"Total time:      {wall_time:.3f} s",
+            f"Total time:      {total_time:.3f} s",
             f"Average request: {average_time:.3f} s",
             f"Download speed:  {speed_bytes_s / MEGABYTE:.2f} MB/s",
         ]
     )
 
 
-def execute(url: str, count: int, timeout: float) -> str | None:
+def execute(url: str) -> str | None:
     print(f"URL:      {url}")
-    print(f"Requests: {count}, timeout: {timeout:g} s")
+    print(f"Requests: {DEFAULT_REQUESTS}, timeout: {DEFAULT_TIMEOUT:g} s")
     print()
     started = time.perf_counter()
     try:
-        measurements = run(url, count, timeout)
+        measurements = run(url, DEFAULT_REQUESTS, DEFAULT_TIMEOUT)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return None
@@ -154,7 +138,7 @@ def ask_choice() -> str:
         print("Enter 1, 2 or 3.")
 
 
-def interactive(count: int, timeout: float) -> int:
+def interactive() -> int:
     url = read_url()
     previous_url: str | None = None
     previous_summary: str | None = None
@@ -164,7 +148,7 @@ def interactive(count: int, timeout: float) -> int:
             print("Previous result:")
             print(previous_summary)
             print()
-        summary = execute(url, count, timeout)
+        summary = execute(url)
         if summary is not None:
             previous_url = url
             previous_summary = summary
@@ -179,7 +163,7 @@ def interactive(count: int, timeout: float) -> int:
 
 
 def main() -> int:
-    return interactive(DEFAULT_REQUESTS, DEFAULT_TIMEOUT)
+    return interactive()
 
 
 if __name__ == "__main__":
