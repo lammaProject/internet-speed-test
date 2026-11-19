@@ -1,4 +1,4 @@
-"""Measure download speed by fetching the same URL sequentially."""
+"""Measure download speed by fetching the same URL in parallel or sequentially."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 DEFAULT_REQUESTS = 10
@@ -41,34 +42,51 @@ def fetch(url: str, timeout: float) -> Measurement:
     return Measurement(size, elapsed)
 
 
-def run(url: str, count: int, timeout: float) -> list[Measurement]:
+def run(
+    url: str,
+    count: int,
+    timeout: float,
+    streams: int = 1,
+) -> list[Measurement]:
     measurements: list[Measurement] = []
-    for index in range(1, count + 1):
-        try:
-            measurement = fetch(url, timeout)
-        except (urllib.error.URLError, OSError) as exc:
-            raise RuntimeError(f"request {index}/{count} failed: {exc}") from exc
-        measurements.append(measurement)
-        print(
-            f"{index:2d}/{count}  "
-            f"{measurement.size_bytes / MEGABYTE:8.2f} MB  "
-            f"{measurement.elapsed_s:7.3f} s  "
-            f"{measurement.speed_mb_s:7.2f} MB/s"
-        )
+    with ThreadPoolExecutor(max_workers=streams) as pool:
+        futures = {
+            pool.submit(fetch, url, timeout): index
+            for index in range(1, count + 1)
+        }
+        for future in as_completed(futures):
+            index = futures[future]
+            try:
+                measurement = future.result()
+            except (urllib.error.URLError, OSError) as exc:
+                raise RuntimeError(
+                    f"request {index}/{count} failed: {exc}"
+                ) from exc
+            measurements.append(measurement)
+            print(
+                f"{index:2d}/{count}  "
+                f"{measurement.size_bytes / MEGABYTE:8.2f} MB  "
+                f"{measurement.elapsed_s:7.3f} s  "
+                f"{measurement.speed_mb_s:7.2f} MB/s"
+            )
     return measurements
 
 
-def summarize(measurements: list[Measurement]) -> str:
+def summarize(
+    measurements: list[Measurement],
+    total_time: float | None = None,
+) -> str:
     total_bytes = sum(item.size_bytes for item in measurements)
-    total_time = sum(item.elapsed_s for item in measurements)
+    request_time = sum(item.elapsed_s for item in measurements)
     count = len(measurements)
-    average_time = total_time / count if count else 0.0
-    speed_bytes_s = total_bytes / total_time if total_time else 0.0
+    average_time = request_time / count if count else 0.0
+    wall_time = request_time if total_time is None else total_time
+    speed_bytes_s = total_bytes / wall_time if wall_time else 0.0
     return "\n".join(
         [
             f"Requests:        {count}",
             f"Total size:      {total_bytes / MEGABYTE:.2f} MB ({total_bytes} bytes)",
-            f"Total time:      {total_time:.3f} s",
+            f"Total time:      {wall_time:.3f} s",
             f"Average request: {average_time:.3f} s",
             f"Download speed:  {speed_bytes_s / MEGABYTE:.2f} MB/s",
         ]
@@ -89,7 +107,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--requests",
         type=int,
         default=DEFAULT_REQUESTS,
-        help=f"number of sequential requests (default: {DEFAULT_REQUESTS})",
+        help=f"total number of requests (default: {DEFAULT_REQUESTS})",
     )
     parser.add_argument(
         "-t",
@@ -98,25 +116,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_TIMEOUT,
         help=f"timeout per request in seconds (default: {DEFAULT_TIMEOUT:g})",
     )
+    parser.add_argument(
+        "-s",
+        "--streams",
+        type=int,
+        default=1,
+        help="concurrent requests (default: 1, strictly sequential)",
+    )
     args = parser.parse_args(argv)
     if args.requests < 1:
         parser.error("--requests must be at least 1")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
+    if args.streams < 1:
+        parser.error("--streams must be at least 1")
     return args
 
 
-def execute(url: str, count: int, timeout: float) -> bool:
+def execute(
+    url: str,
+    count: int,
+    timeout: float,
+    streams: int = 1,
+) -> bool:
     print(f"URL:      {url}")
     print(f"Requests: {count}, timeout: {timeout:g} s")
+    if streams > 1:
+        print(f"Streams:  {streams}")
     print()
+    started = time.perf_counter()
     try:
-        measurements = run(url, count, timeout)
+        measurements = run(url, count, timeout, streams)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return False
+    wall_time = time.perf_counter() - started
     print()
-    print(summarize(measurements))
+    print(summarize(measurements, wall_time))
     return True
 
 
@@ -145,10 +181,10 @@ def ask_choice() -> str:
         print("Enter 1, 2 or 3.")
 
 
-def interactive(count: int, timeout: float) -> int:
+def interactive(count: int, timeout: float, streams: int = 1) -> int:
     url = read_url()
     while url:
-        execute(url, count, timeout)
+        execute(url, count, timeout, streams)
         choice = ask_choice()
         if choice == "1":
             continue
@@ -162,8 +198,12 @@ def interactive(count: int, timeout: float) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.url is None:
-        return interactive(args.requests, args.timeout)
-    return 0 if execute(args.url, args.requests, args.timeout) else 1
+        return interactive(args.requests, args.timeout, args.streams)
+    return (
+        0
+        if execute(args.url, args.requests, args.timeout, args.streams)
+        else 1
+    )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import io
+import threading
 import unittest
 from contextlib import redirect_stdout
 from unittest import mock
@@ -34,6 +35,16 @@ class SummarizeTest(unittest.TestCase):
         text = summarize([])
         self.assertIn("Requests:        0", text)
 
+    def test_explicit_wall_time_drives_speed(self):
+        measurements = [
+            Measurement(size_bytes=1 * speed_test.MEGABYTE, elapsed_s=1.0),
+            Measurement(size_bytes=1 * speed_test.MEGABYTE, elapsed_s=1.0),
+        ]
+        text = summarize(measurements, total_time=1.0)
+        self.assertIn("Total time:      1.000 s", text)
+        self.assertIn("Average request: 1.000 s", text)
+        self.assertIn("Download speed:  2.00 MB/s", text)
+
 
 class RunTest(unittest.TestCase):
     def test_requests_are_sequential_and_fully_read(self):
@@ -65,12 +76,34 @@ class RunTest(unittest.TestCase):
         )
         self.assertEqual(len(closed), 2)
 
+    def test_streams_run_requests_concurrently(self):
+        barrier = threading.Barrier(2, timeout=5)
+
+        def fake_urlopen(request, timeout):
+            barrier.wait()
+            return io.BytesIO(b"x" * 10)
+
+        with mock.patch.object(
+            speed_test.urllib.request, "urlopen", side_effect=fake_urlopen
+        ), redirect_stdout(io.StringIO()):
+            measurements = speed_test.run(
+                "http://example.test/file", 2, 5.0, streams=2
+            )
+
+        self.assertEqual([item.size_bytes for item in measurements], [10, 10])
+
 
 class ParseArgsTest(unittest.TestCase):
-    def test_rejects_non_positive_requests(self):
-        with redirect_stdout(io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
-            with self.assertRaises(SystemExit):
-                speed_test.parse_args(["http://example.test", "-n", "0"])
+    def test_rejects_non_positive_numbers(self):
+        for option in ("-n", "-s"):
+            with self.subTest(option=option):
+                with redirect_stdout(io.StringIO()), mock.patch(
+                    "sys.stderr", io.StringIO()
+                ):
+                    with self.assertRaises(SystemExit):
+                        speed_test.parse_args(
+                            ["http://example.test", option, "0"]
+                        )
 
 
 class InteractiveTest(unittest.TestCase):
@@ -88,7 +121,7 @@ class InteractiveTest(unittest.TestCase):
     def test_repeat_and_another_url_then_exit(self):
         urls = []
 
-        def fake_run(url, count, timeout):
+        def fake_run(url, count, timeout, streams=1):
             urls.append(url)
             return [Measurement(speed_test.MEGABYTE, 1.0)]
 
@@ -103,7 +136,9 @@ class InteractiveTest(unittest.TestCase):
     def test_invalid_choice_is_retried(self):
         code = self.run_main(
             ["http://a", "9", "3"],
-            lambda url, count, timeout: [Measurement(speed_test.MEGABYTE, 1.0)],
+            lambda url, count, timeout, streams=1: [
+                Measurement(speed_test.MEGABYTE, 1.0)
+            ],
         )
         self.assertEqual(code, 0)
 
