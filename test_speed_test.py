@@ -106,6 +106,28 @@ class ParseArgsTest(unittest.TestCase):
                         )
 
 
+class UrlValidationTest(unittest.TestCase):
+    def test_accepts_http_and_https(self):
+        for url in (
+            "http://example.test/file",
+            "https://example.test/image.jpg?size=large",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(speed_test.validate_url(f"  {url} "), url)
+
+    def test_rejects_things_that_are_not_urls(self):
+        for value in (
+            "example.test/file",
+            "not a url",
+            "ftp://example.test/file",
+            "http://",
+            "https://exa mple.test",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    speed_test.validate_url(value)
+
+
 class InteractiveTest(unittest.TestCase):
     def run_main(self, answers, run_side_effect):
         self.answers = iter(answers)
@@ -141,6 +163,29 @@ class InteractiveTest(unittest.TestCase):
             ],
         )
         self.assertEqual(code, 0)
+
+    def test_invalid_url_is_reasked(self):
+        urls = []
+
+        def fake_run(url, count, timeout, streams=1):
+            urls.append(url)
+            return [Measurement(speed_test.MEGABYTE, 1.0)]
+
+        code = self.run_main(
+            ["not a url", "http://a", "3"],
+            fake_run,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(urls, ["http://a"])
+
+    def test_cli_rejects_non_url(self):
+        with mock.patch.object(speed_test, "run") as run, \
+                redirect_stdout(io.StringIO()), \
+                mock.patch("sys.stderr", io.StringIO()):
+            code = speed_test.main(["not a url"])
+        self.assertEqual(code, 2)
+        run.assert_not_called()
 
     def test_failed_request_returns_to_menu(self):
         code = self.run_main(

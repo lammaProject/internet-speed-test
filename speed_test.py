@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 DEFAULT_REQUESTS = 10
 DEFAULT_TIMEOUT = 30.0
@@ -156,13 +157,32 @@ def execute(
     return True
 
 
+def validate_url(value: str) -> str:
+    url = value.strip()
+    parsed = urlparse(url)
+    has_space = any(char.isspace() for char in url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or has_space:
+        raise ValueError(
+            f"{url!r} is not a valid URL. The script needs a full address "
+            "starting with http:// or https:// to know which file to "
+            "download, e.g. https://example.com/image.jpg"
+        )
+    return url
+
+
 def read_url() -> str | None:
-    try:
-        url = input("URL (empty to exit): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return None
-    return url or None
+    while True:
+        try:
+            value = input("URL (empty to exit): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+        if not value:
+            return None
+        try:
+            return validate_url(value)
+        except ValueError as exc:
+            print(f"error: {exc}")
 
 
 def ask_choice() -> str:
@@ -199,9 +219,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.url is None:
         return interactive(args.requests, args.timeout, args.streams)
+    try:
+        url = validate_url(args.url)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     return (
         0
-        if execute(args.url, args.requests, args.timeout, args.streams)
+        if execute(url, args.requests, args.timeout, args.streams)
         else 1
     )
 
