@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
 import time
 import urllib.error
@@ -94,60 +93,13 @@ def summarize(
     )
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Download the same URL several times and report the speed.",
-    )
-    parser.add_argument(
-        "url",
-        nargs="?",
-        help="URL to download, e.g. a large image; omit it to start interactive mode",
-    )
-    parser.add_argument(
-        "-n",
-        "--requests",
-        type=int,
-        default=DEFAULT_REQUESTS,
-        help=f"total number of requests (default: {DEFAULT_REQUESTS})",
-    )
-    parser.add_argument(
-        "-t",
-        "--timeout",
-        type=float,
-        default=DEFAULT_TIMEOUT,
-        help=f"timeout per request in seconds (default: {DEFAULT_TIMEOUT:g})",
-    )
-    parser.add_argument(
-        "-s",
-        "--streams",
-        type=int,
-        default=1,
-        help="concurrent requests (default: 1, strictly sequential)",
-    )
-    args = parser.parse_args(argv)
-    if args.requests < 1:
-        parser.error("--requests must be at least 1")
-    if args.timeout <= 0:
-        parser.error("--timeout must be positive")
-    if args.streams < 1:
-        parser.error("--streams must be at least 1")
-    return args
-
-
-def execute(
-    url: str,
-    count: int,
-    timeout: float,
-    streams: int = 1,
-) -> str | None:
+def execute(url: str, count: int, timeout: float) -> str | None:
     print(f"URL:      {url}")
     print(f"Requests: {count}, timeout: {timeout:g} s")
-    if streams > 1:
-        print(f"Streams:  {streams}")
     print()
     started = time.perf_counter()
     try:
-        measurements = run(url, count, timeout, streams)
+        measurements = run(url, count, timeout)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return None
@@ -202,7 +154,7 @@ def ask_choice() -> str:
         print("Enter 1, 2 or 3.")
 
 
-def interactive(count: int, timeout: float, streams: int = 1) -> int:
+def interactive(count: int, timeout: float) -> int:
     url = read_url()
     previous_url: str | None = None
     previous_summary: str | None = None
@@ -212,7 +164,7 @@ def interactive(count: int, timeout: float, streams: int = 1) -> int:
             print("Previous result:")
             print(previous_summary)
             print()
-        summary = execute(url, count, timeout, streams)
+        summary = execute(url, count, timeout)
         if summary is not None:
             previous_url = url
             previous_summary = summary
@@ -226,21 +178,15 @@ def interactive(count: int, timeout: float, streams: int = 1) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    if args.url is None:
-        return interactive(args.requests, args.timeout, args.streams)
-    try:
-        url = validate_url(args.url)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-    return (
-        0
-        if execute(url, args.requests, args.timeout, args.streams) is not None
-        else 1
-    )
+def main() -> int:
+    return interactive(DEFAULT_REQUESTS, DEFAULT_TIMEOUT)
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        print(
+            "error: this script takes no arguments; enter the URL when prompted",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     sys.exit(main())

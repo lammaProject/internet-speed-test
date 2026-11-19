@@ -93,19 +93,6 @@ class RunTest(unittest.TestCase):
         self.assertEqual([item.size_bytes for item in measurements], [10, 10])
 
 
-class ParseArgsTest(unittest.TestCase):
-    def test_rejects_non_positive_numbers(self):
-        for option in ("-n", "-s"):
-            with self.subTest(option=option):
-                with redirect_stdout(io.StringIO()), mock.patch(
-                    "sys.stderr", io.StringIO()
-                ):
-                    with self.assertRaises(SystemExit):
-                        speed_test.parse_args(
-                            ["http://example.test", option, "0"]
-                        )
-
-
 class UrlValidationTest(unittest.TestCase):
     def test_accepts_http_and_https(self):
         for url in (
@@ -138,12 +125,12 @@ class InteractiveTest(unittest.TestCase):
                 ), \
                 redirect_stdout(io.StringIO()), \
                 mock.patch("sys.stderr", io.StringIO()):
-            return speed_test.main([])
+            return speed_test.main()
 
     def test_repeat_and_another_url_then_exit(self):
         urls = []
 
-        def fake_run(url, count, timeout, streams=1):
+        def fake_run(url, count, timeout):
             urls.append(url)
             return [Measurement(speed_test.MEGABYTE, 1.0)]
 
@@ -158,7 +145,7 @@ class InteractiveTest(unittest.TestCase):
     def test_invalid_choice_is_retried(self):
         code = self.run_main(
             ["http://a", "9", "3"],
-            lambda url, count, timeout, streams=1: [
+            lambda url, count, timeout: [
                 Measurement(speed_test.MEGABYTE, 1.0)
             ],
         )
@@ -167,7 +154,7 @@ class InteractiveTest(unittest.TestCase):
     def test_invalid_url_is_reasked(self):
         urls = []
 
-        def fake_run(url, count, timeout, streams=1):
+        def fake_run(url, count, timeout):
             urls.append(url)
             return [Measurement(speed_test.MEGABYTE, 1.0)]
 
@@ -178,14 +165,6 @@ class InteractiveTest(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertEqual(urls, ["http://a"])
-
-    def test_cli_rejects_non_url(self):
-        with mock.patch.object(speed_test, "run") as run, \
-                redirect_stdout(io.StringIO()), \
-                mock.patch("sys.stderr", io.StringIO()):
-            code = speed_test.main(["not a url"])
-        self.assertEqual(code, 2)
-        run.assert_not_called()
 
     def test_previous_result_is_shown_only_on_repeat(self):
         output = io.StringIO()
@@ -199,7 +178,7 @@ class InteractiveTest(unittest.TestCase):
             "builtins.input",
             side_effect=lambda prompt="": next(answers),
         ), redirect_stdout(output), mock.patch("sys.stderr", io.StringIO()):
-            speed_test.main([])
+            speed_test.main()
 
         text = output.getvalue()
         self.assertEqual(text.count("Previous result:"), 1)
@@ -215,15 +194,8 @@ class InteractiveTest(unittest.TestCase):
     def test_eof_at_url_prompt_exits_cleanly(self):
         with mock.patch("builtins.input", side_effect=EOFError), \
                 redirect_stdout(io.StringIO()):
-            code = speed_test.main([])
+            code = speed_test.main()
         self.assertEqual(code, 0)
-
-    def test_cli_failure_returns_exit_code(self):
-        with mock.patch.object(
-            speed_test, "run", side_effect=RuntimeError("boom")
-        ), redirect_stdout(io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
-            code = speed_test.main(["http://a", "-n", "1"])
-        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":
