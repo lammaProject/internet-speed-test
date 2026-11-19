@@ -187,6 +187,24 @@ class InteractiveTest(unittest.TestCase):
         self.assertEqual(code, 2)
         run.assert_not_called()
 
+    def test_previous_result_is_shown_only_on_repeat(self):
+        output = io.StringIO()
+        answers = iter(["http://a", "1", "2", "http://b", "3"])
+
+        with mock.patch.object(
+            speed_test,
+            "run",
+            return_value=[Measurement(speed_test.MEGABYTE, 1.0)],
+        ), mock.patch(
+            "builtins.input",
+            side_effect=lambda prompt="": next(answers),
+        ), redirect_stdout(output), mock.patch("sys.stderr", io.StringIO()):
+            speed_test.main([])
+
+        text = output.getvalue()
+        self.assertEqual(text.count("Previous result:"), 1)
+        self.assertIn("Previous result:\nRequests:        1", text)
+
     def test_failed_request_returns_to_menu(self):
         code = self.run_main(
             ["http://a", "3"],

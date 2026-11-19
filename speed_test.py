@@ -139,7 +139,7 @@ def execute(
     count: int,
     timeout: float,
     streams: int = 1,
-) -> bool:
+) -> str | None:
     print(f"URL:      {url}")
     print(f"Requests: {count}, timeout: {timeout:g} s")
     if streams > 1:
@@ -150,11 +150,12 @@ def execute(
         measurements = run(url, count, timeout, streams)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
-        return False
+        return None
     wall_time = time.perf_counter() - started
     print()
-    print(summarize(measurements, wall_time))
-    return True
+    summary = summarize(measurements, wall_time)
+    print(summary)
+    return summary
 
 
 def validate_url(value: str) -> str:
@@ -203,8 +204,18 @@ def ask_choice() -> str:
 
 def interactive(count: int, timeout: float, streams: int = 1) -> int:
     url = read_url()
+    previous_url: str | None = None
+    previous_summary: str | None = None
     while url:
-        execute(url, count, timeout, streams)
+        if url == previous_url and previous_summary is not None:
+            print()
+            print("Previous result:")
+            print(previous_summary)
+            print()
+        summary = execute(url, count, timeout, streams)
+        if summary is not None:
+            previous_url = url
+            previous_summary = summary
         choice = ask_choice()
         if choice == "1":
             continue
@@ -226,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     return (
         0
-        if execute(url, args.requests, args.timeout, args.streams)
+        if execute(url, args.requests, args.timeout, args.streams) is not None
         else 1
     )
 
