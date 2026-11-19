@@ -73,5 +73,60 @@ class ParseArgsTest(unittest.TestCase):
                 speed_test.parse_args(["http://example.test", "-n", "0"])
 
 
+class InteractiveTest(unittest.TestCase):
+    def run_main(self, answers, run_side_effect):
+        self.answers = iter(answers)
+        with mock.patch.object(speed_test, "run", side_effect=run_side_effect), \
+                mock.patch(
+                    "builtins.input",
+                    side_effect=lambda prompt="": next(self.answers),
+                ), \
+                redirect_stdout(io.StringIO()), \
+                mock.patch("sys.stderr", io.StringIO()):
+            return speed_test.main([])
+
+    def test_repeat_and_another_url_then_exit(self):
+        urls = []
+
+        def fake_run(url, count, timeout):
+            urls.append(url)
+            return [Measurement(speed_test.MIB, 1.0)]
+
+        code = self.run_main(
+            ["http://a", "1", "2", "http://b", "3"],
+            fake_run,
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(urls, ["http://a", "http://a", "http://b"])
+
+    def test_invalid_choice_is_retried(self):
+        code = self.run_main(
+            ["http://a", "9", "3"],
+            lambda url, count, timeout: [Measurement(speed_test.MIB, 1.0)],
+        )
+        self.assertEqual(code, 0)
+
+    def test_failed_request_returns_to_menu(self):
+        code = self.run_main(
+            ["http://a", "3"],
+            mock.Mock(side_effect=RuntimeError("boom")),
+        )
+        self.assertEqual(code, 0)
+
+    def test_eof_at_url_prompt_exits_cleanly(self):
+        with mock.patch("builtins.input", side_effect=EOFError), \
+                redirect_stdout(io.StringIO()):
+            code = speed_test.main([])
+        self.assertEqual(code, 0)
+
+    def test_cli_failure_returns_exit_code(self):
+        with mock.patch.object(
+            speed_test, "run", side_effect=RuntimeError("boom")
+        ), redirect_stdout(io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+            code = speed_test.main(["http://a", "-n", "1"])
+        self.assertEqual(code, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

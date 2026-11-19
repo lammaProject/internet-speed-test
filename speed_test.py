@@ -81,7 +81,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download the same URL several times and report the speed.",
     )
-    parser.add_argument("url", help="URL to download, e.g. a large image")
+    parser.add_argument(
+        "url",
+        nargs="?",
+        help="URL to download, e.g. a large image; omit it to start interactive mode",
+    )
     parser.add_argument(
         "-n",
         "--requests",
@@ -104,19 +108,64 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    print(f"URL:      {args.url}")
-    print(f"Requests: {args.requests}, timeout: {args.timeout:g} s")
+def execute(url: str, count: int, timeout: float) -> bool:
+    print(f"URL:      {url}")
+    print(f"Requests: {count}, timeout: {timeout:g} s")
     print()
     try:
-        measurements = run(args.url, args.requests, args.timeout)
+        measurements = run(url, count, timeout)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
-        return 1
+        return False
     print()
     print(summarize(measurements))
+    return True
+
+
+def read_url() -> str | None:
+    try:
+        url = input("URL (empty to exit): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    return url or None
+
+
+def ask_choice() -> str:
+    print()
+    print("1) repeat  2) another URL  3) exit")
+    while True:
+        try:
+            answer = input("Choice [1]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return "3"
+        if not answer:
+            return "1"
+        if answer in {"1", "2", "3"}:
+            return answer
+        print("Enter 1, 2 or 3.")
+
+
+def interactive(count: int, timeout: float) -> int:
+    url = read_url()
+    while url:
+        execute(url, count, timeout)
+        choice = ask_choice()
+        if choice == "1":
+            continue
+        if choice == "2":
+            url = read_url()
+            continue
+        break
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.url is None:
+        return interactive(args.requests, args.timeout)
+    return 0 if execute(args.url, args.requests, args.timeout) else 1
 
 
 if __name__ == "__main__":
